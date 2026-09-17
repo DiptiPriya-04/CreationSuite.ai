@@ -1,0 +1,22 @@
+{
+  "name": "creationsuite-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CreationSuite.ai - All-in-one AI Content & SaaS Studio",
+  "scripts": {
+    "install:all": "npm install --prefix client && npm install --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "dev:server": "npm run dev --prefix server",
+    "build:client": "npm run build --prefix client"
+  },
+  "keywords": [
+    "ai",
+    "saas",
+    "react",
+    "express",
+    "gemini",
+    "clerk"
+  ],
+  "author": "DiptiPriya-04",
+  "license": "MIT"
+}
