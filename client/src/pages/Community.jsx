@@ -1,4 +1,4 @@
-import { useAuth, useUser } from '@clerk/clerk-react'
+﻿import { useAuth, useUser } from '@clerk/clerk-react'
 import React, { useEffect, useState } from 'react'
 import { Heart } from 'lucide-react'
 import axios from 'axios'
@@ -25,7 +25,7 @@ const Community = () => {
         toast.error(data.message)
       }
     } catch (error) {
-      toast.error(error.message)
+      toast.error(error.response?.data?.message || error.message)
     }
     setLoading(false)
   }
@@ -43,7 +43,7 @@ const Community = () => {
         toast.error(data.message)
       }
     } catch (error) {
-      toast.error(error.message)
+      toast.error(error.response?.data?.message || error.message)
     }
   }
 

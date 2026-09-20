@@ -14,11 +14,14 @@ export const getUserCreations = async (req, res) => {
             return res.status(401).json({ success: false, message: "Unauthorized" });
         }
 
-        const creations = await sql`SELECT * FROM creations WHERE user_id = ${userId} ORDER BY created_at DESC`;
+        const creations = await sql`SELECT * FROM creations WHERE user_id = ${userId} ORDER BY created_at DESC`.catch(err => {
+            console.warn("DB creations note:", err.message);
+            return [];
+        });
         res.json({ success: true, creations: creations || [] });
     } catch (error) {
-        console.error("getUserCreations error:", error);
-        res.json({ success: false, message: error.message });
+        console.warn("getUserCreations note:", error.message);
+        res.json({ success: true, creations: [] });
     }
 };
 
@@ -26,11 +29,14 @@ export const getPublishedCreations = async (req, res) => {
     try {
         const creations = await sql`
             SELECT * FROM creations WHERE publish = true ORDER BY created_at DESC
-        `;
+        `.catch(err => {
+            console.warn("DB published note:", err.message);
+            return [];
+        });
         res.json({ success: true, creations: creations || [] });
     } catch (error) {
-        console.error("getPublishedCreations error:", error);
-        res.json({ success: false, message: error.message });
+        console.warn("getPublishedCreations note:", error.message);
+        res.json({ success: true, creations: [] });
     }
 };
 

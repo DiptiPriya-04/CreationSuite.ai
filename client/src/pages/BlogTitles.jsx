@@ -1,4 +1,4 @@
-import { useAuth } from '@clerk/clerk-react';
+﻿import { useAuth } from '@clerk/clerk-react';
 import { Hash, Sparkles, Copy } from 'lucide-react'
 import React, { useState } from 'react'
 import toast from 'react-hot-toast'
@@ -33,7 +33,7 @@ const BlogTitles = () => {
         toast.error(data.message)
       }
     } catch (error) {
-      toast.error(error.message)
+      toast.error(error.response?.data?.message || error.message)
     }
     setLoading(false)
   }

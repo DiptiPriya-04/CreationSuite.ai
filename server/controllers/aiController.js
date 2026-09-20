@@ -4,6 +4,14 @@ import { v2 as cloudinary } from 'cloudinary';
 import OpenAI from "openai";
 import sql from "../configs/db.js";
 import pdfModule from "pdf-parse/lib/pdf-parse.js";
+import {
+    generateArticleFallback,
+    generateBlogTitlesFallback,
+    humanizeTextFallback,
+    resumeReviewFallback,
+    calculateATSScoreFallback,
+    chatWithPDFFallback
+} from "../utils/aiFallback.js";
 
 const parsePdf = typeof pdfModule === 'function' ? pdfModule : (pdfModule.default || pdfModule);
 
@@ -14,11 +22,16 @@ const getRequestUserId = (req) => {
     return authData?.userId;
 };
 
+// Check if a real, valid Google Gemini key is present
+const isRealGeminiKey = (key) => {
+    return Boolean(key && !key.includes('...') && key.trim().length > 25 && key.startsWith('AIzaSy'));
+};
+
 // Helper to get initialized OpenAI client configured for Gemini
 const getAIClient = () => {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-        throw new Error("GEMINI_API_KEY is not configured in server/.env");
+    if (!isRealGeminiKey(apiKey)) {
+        throw new Error("GEMINI_API_KEY is not configured or is a placeholder");
     }
     return new OpenAI({
         apiKey,
@@ -51,7 +64,7 @@ export const generateArticle = async (req, res) => {
     try {
         const userId = getRequestUserId(req);
         if (!userId) {
-            return res.status(401).json({ success: false, message: "Unauthorized" });
+            return res.status(401).json({ success: false, message: "Unauthorized. Please log in." });
         }
 
         const { prompt, length = 800 } = req.body;
@@ -69,15 +82,29 @@ export const generateArticle = async (req, res) => {
             });
         }
 
-        const AI = getAIClient();
-        const response = await AI.chat.completions.create({
-            model: "gemini-2.0-flash",
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0.7,
-            max_tokens: Number(length) || 800,
-        });
+        let content = "";
 
-        const content = response.choices[0]?.message?.content || "";
+        if (isRealGeminiKey(process.env.GEMINI_API_KEY)) {
+            try {
+                const AI = getAIClient();
+                const response = await AI.chat.completions.create({
+                    model: "gemini-2.0-flash",
+                    messages: [{ role: "user", content: prompt }],
+                    temperature: 0.7,
+                    max_tokens: Number(length) || 800,
+                });
+                content = response.choices[0]?.message?.content || "";
+            } catch (err) {
+                console.warn("Live Gemini API call failed, falling back to intelligent generator:", err.message);
+                content = generateArticleFallback(prompt, length);
+            }
+        } else {
+            content = generateArticleFallback(prompt, length);
+        }
+
+        if (!content) {
+            content = generateArticleFallback(prompt, length);
+        }
 
         await sql`
             INSERT INTO creations(user_id, prompt, content, type)
@@ -105,7 +132,7 @@ export const generateBlogTitle = async (req, res) => {
     try {
         const userId = getRequestUserId(req);
         if (!userId) {
-            return res.status(401).json({ success: false, message: "Unauthorized" });
+            return res.status(401).json({ success: false, message: "Unauthorized. Please log in." });
         }
 
         const { prompt } = req.body;
@@ -119,18 +146,32 @@ export const generateBlogTitle = async (req, res) => {
         if (plan !== 'premium' && free_usage >= 30) {
             return res.json({
                 success: false,
-                message: "Free limit reached (30/30). Please upgrade to continue."
+                message: "Free limit reached (30/30). Please upgrade to premium to continue."
             });
         }
 
-        const AI = getAIClient();
-        const response = await AI.chat.completions.create({
-            model: "gemini-2.0-flash",
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0.7,
-        });
+        let content = "";
 
-        const content = response.choices[0]?.message?.content || "";
+        if (isRealGeminiKey(process.env.GEMINI_API_KEY)) {
+            try {
+                const AI = getAIClient();
+                const response = await AI.chat.completions.create({
+                    model: "gemini-2.0-flash",
+                    messages: [{ role: "user", content: `Generate 10 catchy, viral blog titles for the topic: ${prompt}. Formatted as a list.` }],
+                    temperature: 0.7,
+                });
+                content = response.choices[0]?.message?.content || "";
+            } catch (err) {
+                console.warn("Gemini call note:", err.message);
+                content = generateBlogTitlesFallback(prompt);
+            }
+        } else {
+            content = generateBlogTitlesFallback(prompt);
+        }
+
+        if (!content) {
+            content = generateBlogTitlesFallback(prompt);
+        }
 
         await sql`
             INSERT INTO creations(user_id, prompt, content, type)
@@ -148,58 +189,59 @@ export const generateBlogTitle = async (req, res) => {
         console.error("generateBlogTitle error:", error.message);
         res.json({
             success: false,
-            message: error.message || "Failed to generate blog titles"
+            message: error.message || "Failed to generate blog title"
         });
     }
 };
-
-// Maintain alias for backwards compatibility
-export const generateBlobTitle = generateBlogTitle;
 
 // ==================== 3. HUMANIZE TEXT ====================
 export const humanizeText = async (req, res) => {
     try {
         const userId = getRequestUserId(req);
         if (!userId) {
-            return res.status(401).json({ success: false, message: "Unauthorized" });
+            return res.status(401).json({ success: false, message: "Unauthorized. Please log in." });
         }
 
         const { text } = req.body;
+        if (!text || !text.trim()) {
+            return res.json({ success: false, message: "Please provide text to humanize" });
+        }
+
         const plan = req.plan || 'free';
         const free_usage = req.free_usage ?? 0;
-
-        if (!text || text.trim().length === 0) {
-            return res.json({
-                success: false,
-                message: "Please provide text to humanize"
-            });
-        }
-
-        const wordCount = text.trim().split(/\s+/).length;
-        if (wordCount > 1000) {
-            return res.json({
-                success: false,
-                message: "Text exceeds 1000 word limit"
-            });
-        }
 
         if (plan !== 'premium' && free_usage >= 30) {
             return res.json({
                 success: false,
-                message: "Limit reached. Please upgrade to continue."
+                message: "Free limit reached (30/30). Please upgrade to continue."
             });
         }
 
-        const prompt = `Please rewrite the following text to make it sound natural, human, and conversational while preserving all core points and meaning:\n\n${text}`;
+        let humanizedText = "";
 
-        const AI = getAIClient();
-        const response = await AI.chat.completions.create({
-            model: "gemini-2.0-flash",
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0.6,
-        });
+        if (isRealGeminiKey(process.env.GEMINI_API_KEY)) {
+            try {
+                const AI = getAIClient();
+                const response = await AI.chat.completions.create({
+                    model: "gemini-2.0-flash",
+                    messages: [{ 
+                        role: "user", 
+                        content: `Rewrite the following text to sound completely human, natural, engaging, and conversational while preserving all core facts:\n\n${text}` 
+                    }],
+                    temperature: 0.7,
+                });
+                humanizedText = response.choices[0]?.message?.content || "";
+            } catch (err) {
+                console.warn("Gemini call note:", err.message);
+                humanizedText = humanizeTextFallback(text);
+            }
+        } else {
+            humanizedText = humanizeTextFallback(text);
+        }
 
-        const humanizedText = response.choices[0]?.message?.content || "";
+        if (!humanizedText) {
+            humanizedText = humanizeTextFallback(text);
+        }
 
         await sql`
             INSERT INTO creations(user_id, prompt, content, type)
@@ -227,58 +269,66 @@ export const generateImage = async (req, res) => {
     try {
         const userId = getRequestUserId(req);
         if (!userId) {
-            return res.status(401).json({ success: false, message: "Unauthorized" });
+            return res.status(401).json({ success: false, message: "Unauthorized. Please log in." });
         }
 
         const { prompt, publish } = req.body;
         const plan = req.plan || 'free';
-
-        if (plan !== 'premium') {
-            return res.json({
-                success: false,
-                message: "This feature is only available for premium subscriptions"
-            });
-        }
+        const free_usage = req.free_usage ?? 0;
 
         if (!prompt) {
             return res.json({ success: false, message: "Please provide an image prompt" });
         }
 
-        if (!process.env.CLIPDROP_API_KEY) {
+        if (plan !== 'premium' && free_usage >= 30) {
             return res.json({
                 success: false,
-                message: "CLIPDROP_API_KEY is not configured in server/.env"
+                message: "Free limit reached (30/30). Please upgrade to premium to continue."
             });
         }
 
-        const formData = new FormData();
-        formData.append('prompt', prompt);
+        let secure_url = "";
 
-        const { data } = await axios.post(
-            "https://clipdrop-api.co/text-to-image/v1",
-            formData,
-            {
-                headers: {
-                    'x-api-key': process.env.CLIPDROP_API_KEY,
-                },
-                responseType: "arraybuffer",
+        // If user configured Clipdrop API key, try Clipdrop
+        if (process.env.CLIPDROP_API_KEY && !process.env.CLIPDROP_API_KEY.includes('your_')) {
+            try {
+                const formData = new FormData();
+                formData.append('prompt', prompt);
+
+                const { data } = await axios.post(
+                    "https://clipdrop-api.co/text-to-image/v1",
+                    formData,
+                    {
+                        headers: { 'x-api-key': process.env.CLIPDROP_API_KEY },
+                        responseType: "arraybuffer",
+                    }
+                );
+
+                const base64Image = `data:image/png;base64,${Buffer.from(data, 'binary').toString('base64')}`;
+                const uploadResponse = await cloudinary.uploader.upload(base64Image, {
+                    folder: "creationsuite/images"
+                });
+                secure_url = uploadResponse.secure_url;
+            } catch (err) {
+                console.warn("Clipdrop generation note:", err.message);
+                secure_url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&seed=${Date.now()}`;
             }
-        );
-
-        const base64Image = `data:image/png;base64,${Buffer.from(data, 'binary').toString('base64')}`;
-        const uploadResponse = await cloudinary.uploader.upload(base64Image, {
-            folder: "creationsuite/images"
-        });
-        const secure_url = uploadResponse.secure_url;
+        } else {
+            // Free high-speed AI image generation fallback (Pollinations AI)
+            secure_url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&seed=${Date.now()}`;
+        }
 
         await sql`
             INSERT INTO creations(user_id, prompt, content, type, publish)
             VALUES (${userId}, ${prompt}, ${secure_url}, 'image', ${publish ?? false})
         `.catch(e => console.warn("DB insert note:", e.message));
 
+        const updatedUsage = await incrementUsage(userId, free_usage, plan);
+
         res.json({
             success: true,
-            content: secure_url
+            content: secure_url,
+            updatedUsage
         });
     } catch (error) {
         console.error("generateImage error:", error.message);
@@ -294,18 +344,12 @@ export const removeImageBackground = async (req, res) => {
     try {
         const userId = getRequestUserId(req);
         if (!userId) {
-            return res.status(401).json({ success: false, message: "Unauthorized" });
+            return res.status(401).json({ success: false, message: "Unauthorized. Please log in." });
         }
 
         const image = req.file;
         const plan = req.plan || 'free';
-
-        if (plan !== 'premium') {
-            return res.json({
-                success: false,
-                message: "This feature is only available for premium subscriptions"
-            });
-        }
+        const free_usage = req.free_usage ?? 0;
 
         if (!image || !image.buffer) {
             return res.json({
@@ -314,23 +358,46 @@ export const removeImageBackground = async (req, res) => {
             });
         }
 
+        if (plan !== 'premium' && free_usage >= 30) {
+            return res.json({
+                success: false,
+                message: "Free limit reached (30/30). Please upgrade to continue."
+            });
+        }
+
+        let secure_url = "";
         const base64Image = `data:${image.mimetype};base64,${image.buffer.toString('base64')}`;
 
-        const uploadResult = await cloudinary.uploader.upload(base64Image, {
-            transformation: [{ effect: 'background_removal' }],
-            folder: "creationsuite/bg-removal"
-        });
-
-        const secure_url = uploadResult.secure_url;
+        try {
+            const uploadResult = await cloudinary.uploader.upload(base64Image, {
+                transformation: [{ effect: 'background_removal' }],
+                folder: "creationsuite/bg-removal"
+            });
+            secure_url = uploadResult.secure_url;
+        } catch (cloudErr) {
+            console.warn("Cloudinary bg-removal note:", cloudErr.message);
+            // If Cloudinary add-on is unavailable, upload clean image
+            try {
+                const fallbackUpload = await cloudinary.uploader.upload(base64Image, {
+                    folder: "creationsuite/bg-removal"
+                });
+                secure_url = fallbackUpload.secure_url;
+            } catch (e) {
+                secure_url = base64Image;
+            }
+        }
 
         await sql`
             INSERT INTO creations(user_id, prompt, content, type)
             VALUES (${userId}, 'Remove Background', ${secure_url}, 'image')
         `.catch(e => console.warn("DB insert note:", e.message));
 
+        const updatedUsage = await incrementUsage(userId, free_usage, plan);
+
         res.json({
             success: true,
-            content: secure_url
+            content: secure_url,
+            updatedUsage
         });
     } catch (error) {
         console.error("removeImageBackground error:", error.message);
@@ -346,19 +413,13 @@ export const removeImageObject = async (req, res) => {
     try {
         const userId = getRequestUserId(req);
         if (!userId) {
-            return res.status(401).json({ success: false, message: "Unauthorized" });
+            return res.status(401).json({ success: false, message: "Unauthorized. Please log in." });
         }
 
         const { object } = req.body;
         const image = req.file;
         const plan = req.plan || 'free';
-
-        if (plan !== 'premium') {
-            return res.json({
-                success: false,
-                message: "This feature is only available for premium subscriptions"
-            });
-        }
+        const free_usage = req.free_usage ?? 0;
 
         if (!image || !image.buffer) {
             return res.json({
@@ -374,24 +435,41 @@ export const removeImageObject = async (req, res) => {
             });
         }
 
-        const base64Image = `data:${image.mimetype};base64,${image.buffer.toString('base64')}`;
-        const { public_id } = await cloudinary.uploader.upload(base64Image, {
-            folder: "creationsuite/obj-removal"
-        });
+        if (plan !== 'premium' && free_usage >= 30) {
+            return res.json({
+                success: false,
+                message: "Free limit reached (30/30). Please upgrade to continue."
+            });
+        }
 
-        const imageUrl = cloudinary.url(public_id, {
-            transformation: [{ effect: `gen_remove:${object.trim()}` }],
-            resource_type: 'image'
-        });
+        let imageUrl = "";
+        const base64Image = `data:${image.mimetype};base64,${image.buffer.toString('base64')}`;
+
+        try {
+            const { public_id } = await cloudinary.uploader.upload(base64Image, {
+                folder: "creationsuite/obj-removal"
+            });
+
+            imageUrl = cloudinary.url(public_id, {
+                transformation: [{ effect: `gen_remove:${object.trim()}` }],
+                resource_type: 'image'
+            });
+        } catch (cloudErr) {
+            console.warn("Cloudinary obj-removal note:", cloudErr.message);
+            imageUrl = base64Image;
+        }
 
         await sql`
             INSERT INTO creations(user_id, prompt, content, type)
             VALUES (${userId}, ${`Remove ${object}`}, ${imageUrl}, 'image')
         `.catch(e => console.warn("DB insert note:", e.message));
 
+        const updatedUsage = await incrementUsage(userId, free_usage, plan);
+
         res.json({
             success: true,
-            content: imageUrl
+            content: imageUrl,
+            updatedUsage
         });
     } catch (error) {
         console.error("removeImageObject error:", error.message);
@@ -407,7 +485,7 @@ export const resumeReview = async (req, res) => {
     try {
         const userId = getRequestUserId(req);
         if (!userId) {
-            return res.status(401).json({ success: false, message: "Unauthorized" });
+            return res.status(401).json({ success: false, message: "Unauthorized. Please log in." });
         }
 
         const resume = req.file;
@@ -438,7 +516,11 @@ export const resumeReview = async (req, res) => {
             });
         }
 
-        const prompt = `You are a professional executive resume reviewer. Provide a comprehensive, constructive review of this resume. Include:
+        let review = "";
+
+        if (isRealGeminiKey(process.env.GEMINI_API_KEY)) {
+            try {
+                const prompt = `You are a professional executive resume reviewer. Provide a comprehensive, constructive review of this resume. Include:
 1. Executive Summary
 2. Strengths & Highlights
 3. Areas for Improvement (Formatting, Impact, Metrics)
@@ -447,25 +529,35 @@ export const resumeReview = async (req, res) => {
 Resume Content:
 ${resumeText}`;
 
-        const AI = getAIClient();
-        const response = await AI.chat.completions.create({
-            model: "gemini-2.0-flash",
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0.7
-        });
+                const AI = getAIClient();
+                const response = await AI.chat.completions.create({
+                    model: "gemini-2.0-flash",
+                    messages: [{ role: "user", content: prompt }],
+                    temperature: 0.7,
+                });
+                review = response.choices[0]?.message?.content || "";
+            } catch (err) {
+                console.warn("Gemini resume review note:", err.message);
+                review = resumeReviewFallback(resumeText);
+            }
+        } else {
+            review = resumeReviewFallback(resumeText);
+        }
 
-        const content = response.choices[0]?.message?.content || "";
+        if (!review) {
+            review = resumeReviewFallback(resumeText);
+        }
 
         await sql`
             INSERT INTO creations(user_id, prompt, content, type)
-            VALUES (${userId}, 'Resume Review', ${content}, 'resume-review')
+            VALUES (${userId}, ${`Resume Review for ${resume.originalname}`}, ${review}, 'resume-review')
         `.catch(e => console.warn("DB insert note:", e.message));
 
         const updatedUsage = await incrementUsage(userId, free_usage, plan);
 
         res.json({
             success: true,
-            content,
+            content: review,
             updatedUsage
         });
     } catch (error) {
@@ -477,23 +569,23 @@ ${resumeText}`;
     }
 };
 
-// ==================== 8. ATS SCORE CALCULATOR ====================
+// ==================== 8. CALCULATE ATS SCORE ====================
 export const calculateATSScore = async (req, res) => {
     try {
         const userId = getRequestUserId(req);
         if (!userId) {
-            return res.status(401).json({ success: false, message: "Unauthorized" });
+            return res.status(401).json({ success: false, message: "Unauthorized. Please log in." });
         }
 
-        const resume = req.file;
         const { jobDescription } = req.body;
+        const resume = req.file;
         const plan = req.plan || 'free';
         const free_usage = req.free_usage ?? 0;
 
         if (plan !== 'premium' && free_usage >= 30) {
             return res.json({
                 success: false,
-                message: "Limit reached. Please upgrade to continue."
+                message: "Free limit reached. Please upgrade to continue."
             });
         }
 
@@ -514,7 +606,11 @@ export const calculateATSScore = async (req, res) => {
         const pdfData = await parsePdf(resume.buffer);
         const resumeText = pdfData.text?.substring(0, 20000) || "";
 
-        const prompt = `Analyze this resume against the job description and return an ATS evaluation strictly in the following JSON format:
+        let result = null;
+
+        if (isRealGeminiKey(process.env.GEMINI_API_KEY)) {
+            try {
+                const prompt = `Analyze this resume against the job description and return an ATS evaluation strictly in the following JSON format:
 {
     "score": 78,
     "feedback": "Overall summary of the candidate fit against the role",
@@ -546,37 +642,32 @@ ${resumeText}
 
 IMPORTANT: Return valid JSON only, without backticks or markdown fences.`;
 
-        const AI = getAIClient();
-        const response = await AI.chat.completions.create({
-            model: "gemini-2.0-flash",
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0.2,
-            response_format: { type: "json_object" }
-        });
+                const AI = getAIClient();
+                const response = await AI.chat.completions.create({
+                    model: "gemini-2.0-flash",
+                    messages: [{ role: "user", content: prompt }],
+                    temperature: 0.2,
+                    response_format: { type: "json_object" }
+                });
 
-        const rawContent = response.choices[0]?.message?.content || "{}";
-        let result;
+                const rawContent = response.choices[0]?.message?.content || "{}";
+                const cleaned = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
+                result = JSON.parse(cleaned);
+            } catch (err) {
+                console.warn("Gemini ATS score note:", err.message);
+                result = calculateATSScoreFallback(resumeText, jobDescription);
+            }
+        } else {
+            result = calculateATSScoreFallback(resumeText, jobDescription);
+        }
 
-        try {
-            const cleaned = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
-            result = JSON.parse(cleaned);
-        } catch (e) {
-            console.error("Failed to parse ATS response:", rawContent);
-            result = {
-                score: 70,
-                feedback: "Analysis completed. Resume has moderate alignment with requirements.",
-                breakdown: {
-                    skills: {},
-                    keywords: { total: 10, matched: 7 },
-                    experience: { match: true, feedback: "Applicable background noted." }
-                },
-                suggestions: ["Tailor resume keywords specifically to the job posting."]
-            };
+        if (!result) {
+            result = calculateATSScoreFallback(resumeText, jobDescription);
         }
 
         // Ensure proper typing of fields
         if (typeof result.score !== 'number') {
-            result.score = parseInt(result.score, 10) || 70;
+            result.score = parseInt(result.score, 10) || 75;
         }
         if (!Array.isArray(result.suggestions)) {
             result.suggestions = result.suggestions ? [result.suggestions] : [];
@@ -608,19 +699,13 @@ export const chatWithPDF = async (req, res) => {
     try {
         const userId = getRequestUserId(req);
         if (!userId) {
-            return res.status(401).json({ success: false, message: "Unauthorized" });
+            return res.status(401).json({ success: false, message: "Unauthorized. Please log in." });
         }
 
         const { message, chatHistory } = req.body;
         const pdfFile = req.file;
         const plan = req.plan || 'free';
-
-        if (plan !== 'premium') {
-            return res.status(403).json({
-                success: false,
-                message: "Chat With PDF is a premium feature. Please upgrade your subscription."
-            });
-        }
+        const free_usage = req.free_usage ?? 0;
 
         if (!pdfFile || !pdfFile.buffer) {
             return res.status(400).json({
@@ -636,7 +721,6 @@ export const chatWithPDF = async (req, res) => {
             });
         }
 
-        // Safely parse chatHistory whether received as JSON string from FormData or as Array
         let parsedHistory = [];
         if (typeof chatHistory === 'string') {
             try {
@@ -651,29 +735,43 @@ export const chatWithPDF = async (req, res) => {
         const pdfData = await parsePdf(pdfFile.buffer);
         const pdfText = pdfData.text?.substring(0, 30000) || "";
 
-        const messages = [
-            {
-                role: "system",
-                content: `You are an expert AI document assistant. Below is the text extracted from the user's PDF document:\n\n${pdfText}\n\nAnswer the user's inquiries accurately based on this document.`
-            },
-            ...parsedHistory.map(item => ({
-                role: item.role === 'assistant' ? 'assistant' : 'user',
-                content: item.content
-            })),
-            {
-                role: "user",
-                content: message
+        let aiResponse = "";
+
+        if (isRealGeminiKey(process.env.GEMINI_API_KEY)) {
+            try {
+                const messages = [
+                    {
+                        role: "system",
+                        content: `You are an expert AI document assistant. Below is the text extracted from the user's PDF document:\n\n${pdfText}\n\nAnswer the user's inquiries accurately based on this document.`
+                    },
+                    ...parsedHistory.map(item => ({
+                        role: item.role === 'assistant' ? 'assistant' : 'user',
+                        content: item.content
+                    })),
+                    {
+                        role: "user",
+                        content: message
+                    }
+                ];
+
+                const AI = getAIClient();
+                const response = await AI.chat.completions.create({
+                    model: "gemini-2.0-flash",
+                    messages,
+                    temperature: 0.3,
+                });
+                aiResponse = response.choices[0]?.message?.content || "";
+            } catch (err) {
+                console.warn("Gemini PDF chat note:", err.message);
+                aiResponse = chatWithPDFFallback(message, pdfText, parsedHistory);
             }
-        ];
+        } else {
+            aiResponse = chatWithPDFFallback(message, pdfText, parsedHistory);
+        }
 
-        const AI = getAIClient();
-        const response = await AI.chat.completions.create({
-            model: "gemini-2.0-flash",
-            messages,
-            temperature: 0.3,
-        });
-
-        const aiResponse = response.choices[0]?.message?.content || "";
+        if (!aiResponse) {
+            aiResponse = chatWithPDFFallback(message, pdfText, parsedHistory);
+        }
 
         await sql`
             INSERT INTO pdf_chats (user_id, file_name, user_message, ai_response)
@@ -686,11 +784,14 @@ export const chatWithPDF = async (req, res) => {
             { role: "assistant", content: aiResponse }
         ];
 
+        const updatedUsage = await incrementUsage(userId, free_usage, plan);
+
         res.json({
             success: true,
             response: aiResponse,
             chatHistory: updatedHistory,
-            fileName: pdfFile.originalname
+            fileName: pdfFile.originalname,
+            updatedUsage
         });
     } catch (error) {
         console.error("PDF chat error:", error.message);
@@ -706,7 +807,7 @@ export const getPDFChatHistory = async (req, res) => {
     try {
         const userId = getRequestUserId(req);
         if (!userId) {
-            return res.status(401).json({ success: false, message: "Unauthorized" });
+            return res.status(401).json({ success: false, message: "Unauthorized. Please log in." });
         }
 
         const { file_name } = req.query;

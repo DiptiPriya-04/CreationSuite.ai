@@ -1,4 +1,4 @@
-import { FileText, Sparkles, Copy } from 'lucide-react';
+﻿import { FileText, Sparkles, Copy } from 'lucide-react';
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useAuth } from '@clerk/clerk-react';
@@ -43,7 +43,7 @@ const ReviewResume = () => {
         toast.error(data.message);
       }
     } catch (error) {
-      toast.error(error.message);
+      toast.error(error.response?.data?.message || error.message);
     }
     setLoading(false);
   };
