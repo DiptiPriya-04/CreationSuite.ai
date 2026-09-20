@@ -18,5 +18,8 @@
     "clerk"
   ],
   "author": "DiptiPriya-04",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "vercel": "^59.20.0"
+  }
 }
