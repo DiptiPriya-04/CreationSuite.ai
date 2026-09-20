@@ -1,6 +1,6 @@
-# CreationSuite.ai - All-in-One AI Studio & SaaS Platform
+# AI-Powered SaaS Platform
 
-CreationSuite.ai is an AI-powered SaaS platform offering dynamic content creation, resume optimization, ATS evaluation, and visual creative tools with tiered subscriptions.
+**AI-Powered SaaS Platform** is an all-in-one AI creation studio offering dynamic content creation, ATS resume evaluation, text humanization, multi-turn PDF chat, and AI visual tools.
 
 ---
 
