@@ -1,253 +1,253 @@
-import React, { useEffect, useRef } from 'react'
-import { PricingTable } from '@clerk/clerk-react'
+import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useUser, useClerk } from '@clerk/clerk-react'
+import { Check, Zap, Sparkles, Shield, ArrowRight } from 'lucide-react'
 import { useTheme } from '../context/ThemeContext'
 
-const Plan = () => {
+const plans = [
+  {
+    id: 'free',
+    name: 'Starter',
+    tagline: 'Ideal for trying out our full suite of AI tools',
+    monthlyPrice: 0,
+    annualPrice: 0,
+    popular: false,
+    badge: null,
+    features: [
+      '5 free AI creation credits',
+      'AI Article & Blog generator',
+      'Standard AI Image generator',
+      'Basic ATS Resume Score check',
+      'Community showcase access',
+      'Standard processing speed'
+    ],
+    cta: 'Get Started Free',
+    buttonVariant: 'outline'
+  },
+  {
+    id: 'pro',
+    name: 'Pro Creator',
+    tagline: 'For creators, developers, and power users needing scale',
+    monthlyPrice: 19,
+    annualPrice: 15,
+    popular: true,
+    badge: 'Most Popular',
+    features: [
+      'Unlimited AI creations & articles',
+      'High-res 4K AI Image generation',
+      'Advanced ATS Resume breakdown & suggestions',
+      'Chat with PDF with full memory',
+      'AI Background & Object Removal',
+      'Humanize AI text generator',
+      'Priority GPU generation speed',
+      'Early access to new AI models'
+    ],
+    cta: 'Upgrade to Pro',
+    buttonVariant: 'primary'
+  },
+  {
+    id: 'enterprise',
+    name: 'Enterprise',
+    tagline: 'For agencies and teams needing custom workflows and volume',
+    monthlyPrice: 49,
+    annualPrice: 39,
+    popular: false,
+    badge: 'Best Value',
+    features: [
+      'Everything in Pro Creator',
+      'Multi-seat team collaboration',
+      'Dedicated high-speed API endpoints',
+      'Custom prompts & branding',
+      'Export detailed ATS audit reports',
+      'Priority 24/7 dedicated support',
+      '99.9% uptime SLA'
+    ],
+    cta: 'Get Enterprise',
+    buttonVariant: 'outline'
+  }
+]
+
+const Plan = ({ id = "Plan" }) => {
   const { theme } = useTheme()
-  const containerRef = useRef(null)
-  const titleRef = useRef(null)
-  const subtitleRef = useRef(null)
-  const pricingTableRef = useRef(null)
-  const backgroundRef = useRef(null)
+  const [isAnnual, setIsAnnual] = useState(true)
+  const { isSignedIn } = useUser()
+  const { openSignIn } = useClerk()
+  const navigate = useNavigate()
 
-  useEffect(() => {
-    const script = document.createElement('script')
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js'
-    script.onload = () => {
-      const { gsap } = window
-
-      const scrollScript = document.createElement('script')
-      scrollScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js'
-      scrollScript.onload = () => {
-        gsap.registerPlugin(window.ScrollTrigger)
-        
-        // Set initial states
-        gsap.set([titleRef.current, subtitleRef.current], {
-          opacity: 0,
-          y: 50,
-          scale: 0.9
-        })
-        
-        gsap.set(".cl-pricing-plan", {
-          opacity: 0,
-          y: 80,
-          scale: 0.8
-        })
-        
-        // Main entrance timeline with ScrollTrigger
-        const mainTL = gsap.timeline({
-          scrollTrigger: {
-            trigger: containerRef.current,
-            start: "top 80%",
-            end: "bottom 20%",
-            toggleActions: "play none none reverse"
-          }
-        })
-        
-        // Animate title with text reveal effect
-        mainTL.to(titleRef.current, {
-          opacity: 1,
-          y: 0,
-          scale: 1,
-          duration: 1.2,
-          ease: "back.out(1.7)",
-          onComplete: () => {
-            // Add continuous floating animation
-            gsap.to(titleRef.current, {
-              y: -5,
-              duration: 3,
-              ease: "sine.inOut",
-              yoyo: true,
-              repeat: -1
-            })
-          }
-        })
-        
-        // Animate subtitle
-        .to(subtitleRef.current, {
-          opacity: 1,
-          y: 0,
-          scale: 1,
-          duration: 0.8,
-          ease: "power2.out"
-        }, "-=0.6")
-        
-        // Animate pricing cards with advanced stagger
-        .to(".cl-pricing-plan", {
-          opacity: 1,
-          y: 0,
-          scale: 1,
-          duration: 1,
-          ease: "back.out(1.4)",
-          stagger: {
-            amount: 1,
-            from: "center"
-          }
-        }, "-=0.4")
-        
-        // Enhanced card interactions
-        document.querySelectorAll(".cl-pricing-plan").forEach((card, index) => {
-          if (card) {
-            // Magnetic hover effect
-            card.addEventListener('mouseenter', () => {
-              gsap.to(card, {
-                y: -15,
-                scale: 1.03,
-                duration: 0.4,
-                ease: "back.out(1.7)"
-              })
-              
-              // Enhanced shadow
-              gsap.to(card, {
-                boxShadow: theme === 'dark' 
-                  ? '0 25px 50px -12px rgba(255, 255, 255, 0.05)'
-                  : '0 25px 50px -12px rgba(0, 0, 0, 0.1)',
-                duration: 0.4,
-                ease: "power2.out"
-              })
-              
-              // Highlight recommended plan
-              if (card.classList.contains('cl-pricing-plan--highlight')) {
-                gsap.to(card, {
-                  boxShadow: theme === 'dark'
-                    ? '0 25px 50px -12px rgba(59, 130, 246, 0.25)'
-                    : '0 25px 50px -12px rgba(59, 130, 246, 0.15)',
-                  duration: 0.4
-                })
-              }
-            })
-            
-            card.addEventListener('mouseleave', () => {
-              gsap.to(card, {
-                y: 0,
-                scale: 1,
-                duration: 0.4,
-                ease: "power2.out"
-              })
-              
-              if (card.classList.contains('cl-pricing-plan--highlight')) {
-                gsap.to(card, {
-                  boxShadow: theme === 'dark'
-                    ? '0 25px 50px -12px rgba(59, 130, 246, 0.15)'
-                    : '0 25px 50px -12px rgba(59, 130, 246, 0.1)',
-                  duration: 0.4
-                })
-              } else {
-                gsap.to(card, {
-                  boxShadow: theme === 'dark'
-                    ? '0 10px 15px -3px rgba(255, 255, 255, 0.02)'
-                    : '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-                  duration: 0.4
-                })
-              }
-            })
-            
-            // Continuous subtle animations
-            gsap.to(card, {
-              y: Math.sin(index) * 3,
-              duration: 3 + (index * 0.5),
-              ease: "sine.inOut",
-              yoyo: true,
-              repeat: -1,
-              delay: index * 0.2
-            })
-          }
-        })
-        
-        // Parallax effect on scroll
-        gsap.to(".cl-pricing-plan", {
-          y: -30,
-          scrollTrigger: {
-            trigger: containerRef.current,
-            start: "top bottom",
-            end: "bottom top",
-            scrub: 1
-          }
-        })
-      }
-      
-      document.head.appendChild(scrollScript)
+  const handleAction = (planId) => {
+    if (!isSignedIn) {
+      openSignIn()
+    } else {
+      navigate('/ai')
     }
-    
-    document.head.appendChild(script)
-    
-    return () => {
-      // Cleanup
-      const scripts = document.querySelectorAll('script[src*="gsap"]')
-      scripts.forEach(script => {
-        if (document.head.contains(script)) {
-          document.head.removeChild(script)
-        }
-      })
-    }
-  }, [theme]) 
+  }
 
   return (
-    <div id="Plan"
-      ref={containerRef} 
-      className={`max-w-8xl mx-auto py-24 px-4 sm:px-8 relative overflow-hidden ${
-        theme === 'dark' ? 'bg-zinc-950' : 'bg-white'
+    <section 
+      id={id} 
+      className={`py-20 relative overflow-hidden transition-colors duration-300 ${
+        theme === 'dark' ? 'bg-zinc-950 text-white' : 'bg-white text-zinc-900'
       }`}
     >
-      {/* Background decorative elements */}
-      <div ref={backgroundRef} className='absolute inset-0 pointer-events-none overflow-hidden'>
-        <div className={`absolute top-10 left-10 w-32 h-32 rounded-full blur-3xl animate-pulse ${
-          theme === 'dark' ? 'bg-blue-400/10' : 'bg-blue-200/30'
-        }`}></div>
-        <div className={`absolute top-20 right-20 w-40 h-40 rounded-full blur-3xl animate-pulse delay-1000 ${
-          theme === 'dark' ? 'bg-purple-400/10' : 'bg-purple-200/30'
-        }`}></div>
-        <div className={`absolute bottom-20 left-1/3 w-28 h-28 rounded-full blur-2xl animate-pulse delay-2000 ${
-          theme === 'dark' ? 'bg-indigo-400/10' : 'bg-indigo-200/30'
-        }`}></div>
-      </div>
-      
-      <div className='text-center relative z-10'>
-        <h2 
-          ref={titleRef} 
-          className={`text-[42px] text-4xl font-bold opacity-0 ${
-            theme === 'dark'
-              ? 'text-white bg-gradient-to-r from-white via-blue-200 to-white bg-clip-text'
-              : 'text-zinc-900 bg-gradient-to-r from-zinc-900 via-blue-600 to-zinc-900 bg-clip-text'
-          }`}
-        >
-          Choose Your Plan
-        </h2>
-        <p 
-          ref={subtitleRef} 
-          className={`max-w-lg mx-auto opacity-0 ${
-            theme === 'dark' ? 'text-gray-300' : 'text-zinc-600'
-          }`}
-        >
-          Start for free and scale up as you grow. Find the perfect plan for your content creation needs.
-        </p>
+      {/* Subtle background ambient glow */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className={`absolute top-1/4 left-1/2 -translate-x-1/2 w-[700px] h-[350px] rounded-full blur-[140px] opacity-25 ${
+          theme === 'dark' ? 'bg-indigo-600' : 'bg-blue-300'
+        }`} />
       </div>
 
-      <div ref={pricingTableRef} className='mt-14 relative z-10'>
-        <div className='flex flex-col items-center justify-center gap-6 lg:flex-row lg:items-stretch lg:justify-center lg:gap-8'>
-          <PricingTable
-            appearance={{
-              variables: theme === 'dark' ? {
-                colorPrimary: "#3b82f6",
-                colorText: "#ffffff",
-                colorTextSecondary: "#d1d5db",
-                colorBackground: "black",
-                colorBackgroundSecondary: "#0f172a",
-                borderColor: "#1e293b"
-              } : {
-                colorPrimary: "#3b82f6",
-                colorText: "#111827",
-                colorTextSecondary: "#4b5563",
-                colorBackground: "#ffffff",
-                colorBackgroundSecondary: "#f9fafb",
-                borderColor: "#e5e7eb"
-              }
-            }}
-          />
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="text-center max-w-3xl mx-auto mb-14">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider mb-4 border bg-indigo-500/10 text-indigo-500 border-indigo-500/20">
+            <Sparkles className="w-3.5 h-3.5" />
+            Transparent Pricing
+          </div>
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight">
+            Choose Your{' '}
+            <span className="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 bg-clip-text text-transparent">
+              Creative Plan
+            </span>
+          </h2>
+          <p className={`mt-4 text-base sm:text-lg max-w-2xl mx-auto ${
+            theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'
+          }`}>
+            Start for free and scale as your content workflows grow. Transparent pricing with zero hidden fees.
+          </p>
 
+          {/* Billing Cycle Toggle */}
+          <div className="mt-8 flex items-center justify-center gap-3">
+            <span className={`text-sm font-medium ${!isAnnual ? (theme === 'dark' ? 'text-white' : 'text-zinc-900') : 'text-zinc-500'}`}>
+              Monthly
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsAnnual(!isAnnual)}
+              aria-label="Toggle billing cycle"
+              className={`relative inline-flex h-7 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                isAnnual ? 'bg-indigo-600' : (theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-300')
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                  isAnnual ? 'translate-x-7' : 'translate-x-0'
+                }`}
+              />
+            </button>
+            <span className={`text-sm font-medium inline-flex items-center gap-1.5 ${isAnnual ? (theme === 'dark' ? 'text-white' : 'text-zinc-900') : 'text-zinc-500'}`}>
+              Annual
+              <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                Save 20%
+              </span>
+            </span>
+          </div>
+        </div>
+
+        {/* Pricing Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-8 items-stretch">
+          {plans.map((plan) => {
+            const price = isAnnual ? plan.annualPrice : plan.monthlyPrice
+            const isPopular = plan.popular
+
+            return (
+              <div
+                key={plan.id}
+                className={`relative flex flex-col rounded-2xl p-7 transition-all duration-300 ${
+                  isPopular
+                    ? (theme === 'dark'
+                        ? 'bg-zinc-900/90 border-2 border-indigo-500 shadow-2xl shadow-indigo-500/15 scale-[1.02]'
+                        : 'bg-white border-2 border-indigo-500 shadow-2xl shadow-indigo-500/20 scale-[1.02]')
+                    : (theme === 'dark'
+                        ? 'bg-zinc-900/50 border border-zinc-800 hover:border-zinc-700'
+                        : 'bg-white border border-zinc-200 hover:border-zinc-300 shadow-md')
+                }`}
+              >
+                {/* Popular / Best Value Badge */}
+                {plan.badge && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md">
+                      <Zap className="w-3 h-3 fill-current" />
+                      {plan.badge}
+                    </span>
+                  </div>
+                )}
+
+                {/* Plan Header */}
+                <div className="mb-6">
+                  <h3 className="text-xl font-bold">{plan.name}</h3>
+                  <p className={`text-xs mt-1.5 min-h-[32px] ${
+                    theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'
+                  }`}>
+                    {plan.tagline}
+                  </p>
+                </div>
+
+                {/* Price Display */}
+                <div className="mb-6 flex items-baseline gap-1">
+                  <span className="text-4xl font-extrabold tracking-tight">
+                    ${price}
+                  </span>
+                  <span className={`text-sm ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                    {plan.monthlyPrice === 0 ? '/forever' : isAnnual ? '/month, billed yearly' : '/month'}
+                  </span>
+                </div>
+
+                {/* CTA Button */}
+                <button
+                  type="button"
+                  onClick={() => handleAction(plan.id)}
+                  className={`w-full py-3 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer mb-6 ${
+                    isPopular
+                      ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 hover:shadow-indigo-600/50'
+                      : theme === 'dark'
+                        ? 'bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700'
+                        : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-300'
+                  }`}
+                >
+                  {plan.cta}
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+
+                {/* Feature List */}
+                <div className="pt-6 border-t border-zinc-200 dark:border-zinc-800/80 flex-grow">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">
+                    What's included:
+                  </p>
+                  <ul className="space-y-3">
+                    {plan.features.map((feature, idx) => (
+                      <li key={idx} className="flex items-start gap-2.5 text-xs sm:text-sm">
+                        <div className={`mt-0.5 p-0.5 rounded-full ${
+                          isPopular 
+                            ? 'bg-indigo-500/10 text-indigo-500' 
+                            : 'bg-emerald-500/10 text-emerald-500'
+                        }`}>
+                          <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                        </div>
+                        <span className={theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'}>
+                          {feature}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Security & Guarantee Note */}
+        <div className="mt-14 text-center flex flex-wrap items-center justify-center gap-6 text-xs text-zinc-500">
+          <div className="flex items-center gap-1.5">
+            <Shield className="w-4 h-4 text-indigo-500" />
+            <span>Secure 256-bit encrypted authentication</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-indigo-500" />
+            <span>Cancel or switch plans anytime</span>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
   )
 }
 
