@@ -194,6 +194,8 @@ export const generateBlogTitle = async (req, res) => {
     }
 };
 
+export const generateBlobTitle = generateBlogTitle;
+
 // ==================== 3. HUMANIZE TEXT ====================
 export const humanizeText = async (req, res) => {
     try {

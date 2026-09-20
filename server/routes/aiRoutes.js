@@ -1,6 +1,6 @@
 import express from "express"
 import { auth } from "../middlewares/auth.js"
-import { calculateATSScore, chatWithPDF, generateArticle, generateBlogTitle, generateBlobTitle, generateImage, getPDFChatHistory, humanizeText, removeImageBackground, removeImageObject, resumeReview } from "../controllers/aiController.js"
+import { calculateATSScore, chatWithPDF, generateArticle, generateBlogTitle, generateImage, getPDFChatHistory, humanizeText, removeImageBackground, removeImageObject, resumeReview } from "../controllers/aiController.js"
 import { imageUpload, pdfUpload} from "../configs/multer.js"
 
 const aiRouter = express.Router()
