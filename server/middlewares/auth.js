@@ -3,6 +3,13 @@ import { clerkClient, getAuth } from "@clerk/express";
 // Middleware to check userId, free_usage, and subscription plan
 export const auth = async (req, res, next) => {
     try {
+        if (!process.env.CLERK_PUBLISHABLE_KEY || !process.env.CLERK_SECRET_KEY) {
+            return res.status(401).json({
+                success: false,
+                message: "Clerk authentication keys are not configured in server/.env. Please configure CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY to test authenticated endpoints."
+            });
+        }
+
         const authData = getAuth(req);
         const userId = authData?.userId;
 
