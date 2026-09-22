@@ -28,7 +28,8 @@
 - **Backend**: Node.js, Express, Clerk Express SDK, Multer, Axios.
 - **AI Engine**: Google Gemini 2.0 Flash (OpenAI-compatible endpoints), Clipdrop API.
 - **Database & CDN**: Neon Serverless PostgreSQL, Cloudinary CDN.
-
+local host :- http://localhost:5173/
+  
 ---
 
 ## Project Structure
